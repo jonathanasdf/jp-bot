@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-from discordant import Discordant, configure_logging
+from discordant import Discordant
 
 
 if __name__ == '__main__':
-    configure_logging()
-
     bot = Discordant()
     try:
         bot.run()

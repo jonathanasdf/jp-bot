@@ -9,13 +9,10 @@ from os import path
 
 import aiohttp
 import discord
-import motor.motor_asyncio
 
 import discordant.utils as utils
 
-Command = namedtuple('Command', ['name', 'arg_func', 'aliases', 'section',
-                                 'help', 'context', 'perm_func'])
-Context = namedtuple('Context', ['server', 'author', 'cmd', 'cmd_name'])
+Command = namedtuple('Command', ['name', 'arg_func', 'aliases', 'section', 'help'])
 
 
 def decorate_all_events():
@@ -40,27 +37,15 @@ class Discordant(discord.Client):
     def __init__(self, config_file='config.json'):
         super().__init__()
 
-        self.__email = ''  # prevent a conflict with discord.Client#email
-        self._password = ''
         self._token = ''
         self.command_char = ''
-        self.controllers = []
-        self.mongodb = None
         self.config = {}
-        self.default_server = None
         self.commands_parsed = 0
-        self.log_channel = None
-        self.warning_log_channel = None
-        self.staff_channel = None
-        self.testing_channel = None
 
         self.load_config(config_file)
 
     def run(self):
-        if self._token:
-            super().run(self._token)
-        else:
-            super().run(self.__email, self._password)
+        super().run(self._token)
 
     def load_config(self, config_file):
         if utils.is_url(config_file):
@@ -79,15 +64,8 @@ class Discordant(discord.Client):
         else:
             with open(config_file, "r") as f:
                 self.config = json.load(f)
-        if 'token' in self.config['login']:
-            self._token = self.config['login']['token']
-        else:
-            self.__email = self.config['login']['email']
-            self._password = self.config['login']['password']
+        self._token = self.config['login']['token']
         self.command_char = self.config['commands']['command_char']
-        self.controllers = self.config["client"]["controllers"]
-        self.mongodb = motor.motor_asyncio.AsyncIOMotorClient(
-            self.config["api-keys"]["mongodb"]).get_default_database()
         self.load_aliases()
 
     def load_aliases(self):
@@ -103,33 +81,14 @@ class Discordant(discord.Client):
 
     async def on_error(self, event_method, *args, **kwargs):
         await super().on_error(event_method, *args, **kwargs)
-        # have to put this here cuz traceback.format_exc wont work otherwise
-        try:
-            zwsp = "​"  # zero width space
-            for uid in self.controllers:
-                await self.send_message(
-                    self.default_server.get_member(uid),
-                    utils.python_format(traceback.format_exc()))
-        except:
-            print("Error in on_error:\n" + traceback.format_exc(),
-                  file=sys.stderr)
+        print("Error:\n" + utils.python_format(traceback.format_exc()), file=sys.stderr)
 
     async def on_ready(self):
-        self.log_channel = self.get_channel(
-            self.config["moderation"]["log_channel"])
-        self.warning_log_channel = self.get_channel(
-            self.config["moderation"]["warning_log_channel"])
-        self.staff_channel = self.get_channel(
-            self.config["moderation"]["staff_channel"])
-        self.testing_channel = self.get_channel(
-            self.config["client"]["testing_channel"])
-        self.default_server = self.log_channel.server
         await self.change_presence(
             game=discord.Game(name=self.config["client"]["game"])
             if self.config["client"]["game"] else None)
 
     async def on_message(self, message):
-        # TODO: logging
         if message.content.startswith(self.command_char) and \
                         message.author != self.user:
             await self.run_command(message)
@@ -152,15 +111,6 @@ class Discordant(discord.Client):
             self.commands_parsed += 1
             cmd = self._commands[self._aliases[cmd_name]]
             params = [args, message]
-            server = message.server or self.default_server
-            author = server.get_member(message.author.id)
-            if cmd.context:
-                params.append(Context(server, author, cmd, cmd_name))
-            if cmd.perm_func and not cmd.perm_func(self, author):
-                await self.send_message(
-                    message.channel,
-                    "You are not authorized to use this command.")
-                return
             if cmd.arg_func:
                 res = cmd.arg_func(args)
                 if isinstance(res, tuple):
@@ -202,8 +152,7 @@ class Discordant(discord.Client):
         return wrapper
 
     @classmethod
-    def register_command(cls, name, aliases=None, section=None, context=False,
-                         perm_func=None, arg_func=None):
+    def register_command(cls, name, aliases=None, section=None, arg_func=None):
         if not aliases:
             aliases = [name]
         else:
@@ -226,7 +175,7 @@ class Discordant(discord.Client):
             cls._commands[func_name] = Command(
                 func_name, arg_func, aliases,
                 section or func.__module__.split(".")[-1],
-                utils.cmd_help_format(func.__doc__), context, perm_func)
+                utils.cmd_help_format(func.__doc__))
             # associate the given aliases with the command
             for alias in aliases:
                 if alias in cls._aliases:

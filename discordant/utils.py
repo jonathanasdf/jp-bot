@@ -86,70 +86,6 @@ def _general_search(search, seq):
     return None
 
 
-async def is_punished(self, member, *actions):
-    punishments = ["ban", "warning", "mute"]
-    if not set(actions) <= set(punishments):
-        raise ValueError("Invalid action, must be one of: " +
-                         ", ".join(punishments))
-    cursor = await self.mongodb.punishments.find(
-        {"user_id": member.id}).to_list(None)
-    cursor.reverse()
-    if not cursor:
-        return False
-    actions = actions if actions else punishments
-    for action in actions:
-        if await _is_punished(cursor, action):
-            return True
-    return False
-
-async def _is_punished(cursor, action):
-    if action == "ban":
-        return bool(discord.utils.find(lambda x: x["action"] == "ban", cursor))
-    else:
-        def f(x):
-            td = datetime.utcnow() - x["date"]
-            return x["action"] == action and td.seconds / float(
-                3600) + td.days * 24 < x["duration"]
-        active = discord.utils.find(f, cursor)
-        if not active:
-            return False
-
-        def g(x):
-            nonlocal active
-            xd = x["date"]
-            ad = active["date"]
-            td = xd - ad
-            return x["action"] == "remove " + action and \
-                (xd > ad and td.seconds / float(3600) + td.days * 24 < active[
-                    "duration"])
-        return discord.utils.find(g, cursor) is None
-
-
-async def add_punishment_timer(self, member, action):
-    role = action_to_role(self, action)
-    while True:
-        punished = await is_punished(self, member, action)
-        if not punished:
-            print("Removing punishment for " + str(member))
-            if role:
-                await self.remove_roles(member, role)
-            break
-        await asyncio.sleep(
-            self.config["moderation"]["punishment_check_rate"])
-
-
-def action_to_role(self, action):
-    dct = {
-        # "warning": "Warned",
-        "mute": "Muted"
-    }
-    if action not in dct:
-        return None
-        # raise ValueError("Invalid action {}, must be one of: {}".format(
-        #     action, ", ".join(dct.keys())))
-    return discord.utils.get(self.default_server.roles, name=dct[action])
-
-
 def get_cmd(self, cmd_name):
     try:
         return self._commands[self._aliases[cmd_name]]
@@ -168,10 +104,6 @@ def cmd_help_format(cmd):
 async def send_help(self, message, cmd_name):
     await self.send_message(message.channel, cmd_help_format(get_cmd(
         self, cmd_name)))
-
-
-def is_controller(self, user):
-    return user.id in self.controllers
 
 
 def python_format(code):

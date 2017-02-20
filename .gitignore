@@ -1,9 +1,1 @@
-.idea/
-venv/
-*.sublime-*
-.*~
-*~
-*.pyc
-
-config.json
-logs/
+__pycache__

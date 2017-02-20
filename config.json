@@ -1,0 +1,14 @@
+{
+	"login": {
+		"token": "FILL ME IN"
+	},
+	"commands": {
+		"command_char": "!"
+	},
+	"aliases": {
+		"help": ["commands", "cmds"]
+	},
+	"client": {
+		"game": "type !help"
+        }
+}
